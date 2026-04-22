@@ -1,0 +1,4 @@
+enum QuizMode{
+  normal,
+  timed, 
+}
