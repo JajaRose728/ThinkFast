@@ -1,0 +1,29 @@
+﻿{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "firestoredbjardeleza",
+          "appId": "1:911387690247:android:1a24b69daf631ccaccf1a2",
+          "fileOutput": "android/app/google-services.json"
+        }
+      }
+    },
+    "dart": {
+      "lib/firebase_options.dart": {
+        "projectId": "firestoredbjardeleza",
+        "configurations": {
+          "android": "1:911387690247:android:1a24b69daf631ccaccf1a2",
+          "ios": "1:911387690247:ios:38b46006edea7b12ccf1a2",
+          "macos": "1:911387690247:ios:38b46006edea7b12ccf1a2",
+          "web": "1:911387690247:web:c9457b76a019c0b0ccf1a2",
+          "windows": "1:911387690247:web:b0b56fb33b9d6be4ccf1a2"
+        }
+      }
+    }
+  }
+}

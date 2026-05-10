@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "911387690247",
+    "project_id": "firestoredbjardeleza",
+    "storage_bucket": "firestoredbjardeleza.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:911387690247:android:1a24b69daf631ccaccf1a2",
+        "android_client_info": {
+          "package_name": "com.example.thinkfast"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7WWBcR8kSnvDzlX9kcE7cDcTtTSu7XVU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math';
 import '../models/quiz_model.dart';
+import '../services/database_service.dart';
+import '../utils/constants.dart';
 
 class QuizCreatorScreen extends StatefulWidget {
-  const QuizCreatorScreen({super.key});
+  final Quiz? quizToEdit;
+  const QuizCreatorScreen({super.key, this.quizToEdit});
 
   @override
   State<QuizCreatorScreen> createState() => _QuizCreatorScreenState();
@@ -11,42 +16,215 @@ class QuizCreatorScreen extends StatefulWidget {
 class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  final _timeLimitController = TextEditingController();
+  String _selectedCategory = quizCategories.first;
   
-  // List to hold the questions as the user adds them
   final List<Question> _questions = [];
+  final DatabaseService _dbService = DatabaseService();
 
-  // Controllers for the current question being typed
+  // Controllers for current question input
   final _questionTextController = TextEditingController();
-  final _option1Controller = TextEditingController();
-  final _option2Controller = TextEditingController();
+  final List<TextEditingController> _optionControllers = [];
+  int _correctOptionIndex = 0;
+  int? _editingQuestionIndex;
 
-  void _addQuestion() {
-    if (_questionTextController.text.isNotEmpty && 
-        _option1Controller.text.isNotEmpty && 
-        _option2Controller.text.isNotEmpty) {
-      
-      setState(() {
-        _questions.add(Question(
-          questionText: _questionTextController.text,
-          options: [_option1Controller.text, _option2Controller.text],
-          correctAnswerIndex: 0, // Simplified: first option is correct
-        ));
-        // Clear question fields for the next one
-        _questionTextController.clear();
-        _option1Controller.clear();
-        _option2Controller.clear();
-      });
+  bool get _isEditing => widget.quizToEdit != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _addOptionField();
+    _addOptionField();
+    if (_isEditing) {
+      _titleController.text = widget.quizToEdit!.title;
+      _selectedCategory = widget.quizToEdit!.category;
+      if (!quizCategories.contains(_selectedCategory)) {
+        _selectedCategory = quizCategories.first;
+      }
+      _questions.addAll(widget.quizToEdit!.questions);
     }
   }
 
-  void _saveQuiz() {
-    if (_formKey.currentState!.validate() && _questions.isNotEmpty) {
-      // In a real app, you would send this to Firebase or Local Storage here
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _questionTextController.dispose();
+    for (var c in _optionControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addOptionField() {
+    setState(() {
+      _optionControllers.add(TextEditingController());
+      if (_correctOptionIndex >= _optionControllers.length) {
+        _correctOptionIndex = _optionControllers.length - 1;
+      }
+    });
+  }
+
+  void _clearQuestionForm() {
+    for (var controller in _optionControllers) {
+      controller.dispose();
+    }
+    _optionControllers.clear();
+    _questionTextController.clear();
+    _optionControllers.add(TextEditingController());
+    _optionControllers.add(TextEditingController());
+    _correctOptionIndex = 0;
+    _editingQuestionIndex = null;
+    setState(() {});
+  }
+
+  void _loadQuestionIntoForm(int index) {
+    final selected = _questions[index];
+    for (var controller in _optionControllers) {
+      controller.dispose();
+    }
+    _optionControllers.clear();
+    for (final option in selected.options) {
+      _optionControllers.add(TextEditingController(text: option));
+    }
+    if (_optionControllers.length < 2) {
+      _optionControllers.add(TextEditingController());
+      _optionControllers.add(TextEditingController());
+    }
+    _correctOptionIndex = selected.correctAnswerIndex.clamp(0, _optionControllers.length - 1);
+    setState(() {
+      _editingQuestionIndex = index;
+      _questionTextController.text = selected.questionText;
+    });
+  }
+
+  void _removeOptionField(int index) {
+    if (_optionControllers.length <= 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quiz Created Successfully!')),
+        const SnackBar(content: Text('Minimum 2 options required')),
       );
-      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      _optionControllers[index].dispose();
+      _optionControllers.removeAt(index);
+      if (_correctOptionIndex == index) {
+        _correctOptionIndex = 0;
+      } else if (_correctOptionIndex > index) {
+        _correctOptionIndex--;
+      }
+    });
+  }
+
+  // Generate a random 6-digit alphanumeric code
+  String _generateShareCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return String.fromCharCodes(Iterable.generate(
+        6, (_) => chars.codeUnitAt(Random().nextInt(chars.length))));
+  }
+
+
+  void _removeQuestion(int index) {
+    setState(() {
+      _questions.removeAt(index);
+      if (_editingQuestionIndex != null) {
+        if (_editingQuestionIndex == index) {
+          _clearQuestionForm();
+        } else if (_editingQuestionIndex! > index) {
+          _editingQuestionIndex = _editingQuestionIndex! - 1;
+        }
+      }
+    });
+  }
+
+  void _saveQuestion() {
+    if (_questionTextController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter the question text')),
+      );
+      return;
+    }
+
+    final options = _optionControllers.map((c) => c.text.trim()).toList();
+    if (options.any((o) => o.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all option fields')),
+      );
+      return;
+    }
+
+    final newQuestion = Question(
+      questionText: _questionTextController.text.trim(),
+      options: options,
+      correctAnswerIndex: _correctOptionIndex,
+    );
+
+    setState(() {
+      if (_editingQuestionIndex != null) {
+        _questions[_editingQuestionIndex!] = newQuestion;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Question updated')), 
+        );
+      } else {
+        _questions.add(newQuestion);
+      }
+      _clearQuestionForm();
+    });
+  }
+
+  void _saveQuiz() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in to save a quiz')),
+      );
+      return;
+    }
+
+    if (_formKey.currentState!.validate() && _questions.isNotEmpty) {
+      try {
+        if (_isEditing) {
+          // Verify user is the creator before allowing edits
+          if (widget.quizToEdit!.creatorId != user.uid) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Only the quiz creator can edit this quiz')),
+            );
+            return;
+          }
+
+          final updatedQuiz = Quiz(
+            id: widget.quizToEdit!.id,
+            title: _titleController.text.trim(),
+            category: _selectedCategory,
+            questions: _questions,
+            shareCode: widget.quizToEdit!.shareCode,
+            creatorId: widget.quizToEdit!.creatorId,
+            sharedWith: widget.quizToEdit!.sharedWith,
+          );
+          await _dbService.updateQuiz(updatedQuiz);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Quiz updated successfully!')),
+          );
+        } else {
+          final newQuiz = Quiz(
+            title: _titleController.text.trim(),
+            category: _selectedCategory,
+            questions: _questions,
+            shareCode: _generateShareCode(),
+          );
+          await _dbService.uploadQuiz(newQuiz, user.uid);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Quiz Created! Code: ${newQuiz.shareCode}')),
+          );
+        }
+        Navigator.pop(context);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     } else if (_questions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add at least one question!')),
@@ -56,51 +234,222 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final catColor = categoryColors[_selectedCategory] ?? AppColors.primary;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Create New Quiz')),
+      appBar: AppBar(
+        title: Text(_isEditing ? 'Edit Quiz' : 'Create New Quiz'),
+      ),
       body: Form(
-        key: _formKey, // Goal: Form with validation [cite: 213]
+        key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
             TextFormField(
               controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Quiz Title'),
+              decoration: const InputDecoration(
+                labelText: 'Quiz Title',
+                prefixIcon: Icon(Icons.title, color: AppColors.primary),
+              ),
               validator: (value) => value!.isEmpty ? 'Enter a title' : null,
             ),
-            TextFormField(
-              controller: _timeLimitController,
-              decoration: const InputDecoration(labelText: 'Time Limit (Seconds) for Timed Mode'),
-              keyboardType: TextInputType.number,
-              validator: (value) => value!.isEmpty ? 'Enter a time limit' : null,
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedCategory,
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                prefixIcon: Icon(Icons.category, color: AppColors.primary),
+              ),
+              items: quizCategories.map((category) {
+                final color = categoryColors[category] ?? AppColors.primary;
+                return DropdownMenuItem(
+                  value: category,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(category),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() => _selectedCategory = value!);
+              },
             ),
-            const Divider(height: 40),
-            const Text("Add Questions", style: TextStyle(fontWeight: FontWeight.bold)),
-            TextFormField(
-              controller: _questionTextController,
-              decoration: const InputDecoration(labelText: 'Question Text'),
-            ),
-            TextFormField(
-              controller: _option1Controller,
-              decoration: const InputDecoration(labelText: 'Option 1 (Correct Answer)'),
-            ),
-            TextFormField(
-              controller: _option2Controller,
-              decoration: const InputDecoration(labelText: 'Option 2'),
-            ),
+            const Divider(height: 40, thickness: 2),
+            Text(_isEditing ? "Edit Questions" : "Step 2: Add Questions", 
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.textPrimary)),
             const SizedBox(height: 10),
-            ElevatedButton(onPressed: _addQuestion, child: const Text("Add Question to List")),
-            
-            const SizedBox(height: 20),
-            Text("Questions Added: ${_questions.length}"),
-            // Optimization: List of questions added
-            ..._questions.map((q) => ListTile(title: Text(q.questionText))),
-            
+            Card(
+              color: catColor.withOpacity(0.05),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: catColor.withOpacity(0.2)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextFormField(
+                      controller: _questionTextController,
+                      decoration: const InputDecoration(
+                        labelText: 'Question Text',
+                        prefixIcon: Icon(Icons.help_outline, color: AppColors.primary),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Answer Options', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    const SizedBox(height: 10),
+                    ...List.generate(_optionControllers.length, (index) {
+                      final optColor = optionColors[index % optionColors.length];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Radio<int>(
+                              value: index,
+                              groupValue: _correctOptionIndex,
+                              activeColor: AppColors.success,
+                              onChanged: (val) {
+                                setState(() => _correctOptionIndex = val!);
+                              },
+                            ),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _optionControllers[index],
+                                decoration: InputDecoration(
+                                  labelText: 'Option ${index + 1}',
+                                  prefixIcon: Container(
+                                    width: 28,
+                                    height: 28,
+                                    margin: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: optColor.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        String.fromCharCode(65 + index),
+                                        style: TextStyle(color: optColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                  ),
+                                  suffixIcon: _optionControllers.length > 2
+                                      ? IconButton(
+                                          icon: const Icon(Icons.remove_circle, color: AppColors.error),
+                                          onPressed: () => _removeOptionField(index),
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    if (_optionControllers.length < 6)
+                      TextButton.icon(
+                        onPressed: _addOptionField,
+                        icon: const Icon(Icons.add, color: AppColors.primary),
+                        label: const Text('Add Option', style: TextStyle(color: AppColors.primary)),
+                      ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      onPressed: _saveQuestion,
+                      icon: const Icon(Icons.add),
+                      label: Text(_editingQuestionIndex != null ? "Update Question" : "Add Question to List"),
+                    ),
+                    if (_editingQuestionIndex != null)
+                      TextButton(
+                        onPressed: _clearQuestionForm,
+                        child: const Text('Cancel Edit', style: TextStyle(color: AppColors.error)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                "Questions to be saved: ${_questions.length}", 
+                style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.primary),
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_editingQuestionIndex != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit, color: AppColors.warning),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Editing question ${_editingQuestionIndex! + 1}. Save or cancel to continue.',
+                          style: const TextStyle(color: AppColors.textPrimary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ...List.generate(_questions.length, (index) {
+              final q = _questions[index];
+              final isSelected = index == _editingQuestionIndex;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                color: isSelected ? AppColors.primary.withOpacity(0.08) : null,
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text('${index + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  title: Text(q.questionText, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('${q.options.length} options • Correct: ${q.options[q.correctAnswerIndex]}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: AppColors.error),
+                    onPressed: () => _removeQuestion(index),
+                  ),
+                  onTap: () => _loadQuestionIntoForm(index),
+                ),
+              );
+            }),
             const SizedBox(height: 30),
             ElevatedButton(
               onPressed: _saveQuiz,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-              child: const Text("Save Final Quiz"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isEditing ? AppColors.warning : AppColors.success, 
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(_isEditing ? "UPDATE QUIZ" : "SAVE TO DATABASE", 
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -108,3 +457,4 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
     );
   }
 }
+
