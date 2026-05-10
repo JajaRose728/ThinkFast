@@ -1,5 +1,4 @@
 # ThinkFast
-
 ## Description
 ThinkFast is a Flutter-based quiz application that allows users to create, share, and take quizzes with friends. Users can build custom quizzes with multiple-choice questions, categorize them, and share via unique codes for others to import and play.
 
@@ -14,8 +13,21 @@ ThinkFast is a Flutter-based quiz application that allows users to create, share
 - Secure data storage with Firestore
 
 ## Screenshots
-[Include 3-5 screenshots of your app here]
+Login/Sign Up screen
+<img width="1919" height="949" alt="Screenshot 2026-05-10 125646" src="https://github.com/user-attachments/assets/fecef2dd-229c-4d0c-a470-fab1503ed1cb" />
 
+Create Quiz screen
+<img width="1919" height="949" alt="Screenshot 2026-05-10 125727" src="https://github.com/user-attachments/assets/8a5d1e21-d4a1-409b-8948-4679a32346e5" />
+
+Home screen
+<img width="1919" height="948" alt="Screenshot 2026-05-10 125833" src="https://github.com/user-attachments/assets/e0583eeb-fab5-4fc5-8618-6f9792b901cc" />
+
+Quiz
+
+<img width="1919" height="896" alt="Screenshot 2026-05-10 125839" src="https://github.com/user-attachments/assets/f8f7d870-48a3-4885-bad3-35bf3c9fabff" />
+<img width="1919" height="949" alt="Screenshot 2026-05-10 130037" src="https://github.com/user-attachments/assets/a13cc049-f850-4251-bfb7-40e3494f7778" />
+
+[!TIP]
 ## Security Features (Course Goal 1)
 - [x] HTTPS for API calls (Firebase handles secure connections)
 - [x] Encrypted storage for sensitive data (Firebase Auth and Firestore)
@@ -51,4 +63,4 @@ Flutter was an excellent choice for this project because:
 - cupertino_icons: ^1.0.8
 
 ## Author
-Your Name - your.email@example.com
+Jaja - jalenerosejardeleza@gmail.com
