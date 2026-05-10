@@ -99,9 +99,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: categoryColor.withOpacity(0.1),
+                    color: categoryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: categoryColor.withOpacity(0.2)),
+                    border: Border.all(color: categoryColor.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -147,13 +147,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.4)),
+                              Icon(Icons.inbox_outlined, size: 64, color: AppColors.textSecondary.withValues(alpha: 0.4)),
                               const SizedBox(height: 16),
                               Text(
                                 'No quizzes found.\nCreate or Import one!',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: AppColors.textSecondary.withOpacity(0.6),
+                                  color: AppColors.textSecondary.withValues(alpha: 0.6),
                                   fontSize: 16,
                                 ),
                               ),
@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
-                                  color: catColor.withOpacity(0.15),
+                                  color: catColor.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(Icons.quiz, color: catColor),
@@ -195,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: catColor.withOpacity(0.1),
+                                        color: catColor.withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
@@ -288,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     width: 36,
                                     height: 36,
                                     decoration: BoxDecoration(
-                                      color: AppColors.success.withOpacity(0.1),
+                                      color: AppColors.success.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: const Icon(Icons.play_arrow_rounded, color: AppColors.success),

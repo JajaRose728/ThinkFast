@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import './providers/quiz_provider.dart';
@@ -19,7 +20,7 @@ void main() async {
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
-    print('Warning: Could not load .env file: $e');
+    debugPrint('Warning: Could not load .env file: $e');
   }
 
   await Firebase.initializeApp(
@@ -59,8 +60,6 @@ class QuizApp extends StatelessWidget {
           onSurface: AppColors.textPrimary,
           error: AppColors.error,
           onError: Colors.white,
-          background: AppColors.background,
-          onBackground: AppColors.textPrimary,
         ),
         scaffoldBackgroundColor: AppColors.background,
         appBarTheme: const AppBarTheme(

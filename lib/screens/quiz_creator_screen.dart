@@ -4,6 +4,7 @@ import 'dart:math';
 import '../models/quiz_model.dart';
 import '../services/database_service.dart';
 import '../utils/constants.dart';
+import '../utils/helpers.dart';
 
 class QuizCreatorScreen extends StatefulWidget {
   final Quiz? quizToEdit;
@@ -221,8 +222,12 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
         Navigator.pop(context);
       } catch (e) {
         if (!mounted) return;
+        String errorMessage = e.toString();
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.replaceFirst('Exception: ', '');
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $errorMessage')),
         );
       }
     } else if (_questions.isEmpty) {
@@ -251,7 +256,7 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                 labelText: 'Quiz Title',
                 prefixIcon: Icon(Icons.title, color: AppColors.primary),
               ),
-              validator: (value) => value!.isEmpty ? 'Enter a title' : null,
+              validator: validateInputForInjection,
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -302,6 +307,7 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                         labelText: 'Question Text',
                         prefixIcon: Icon(Icons.help_outline, color: AppColors.primary),
                       ),
+                      validator: validateInputForInjection,
                     ),
                     const SizedBox(height: 16),
                     const Text('Answer Options', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
@@ -347,6 +353,7 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                                         )
                                       : null,
                                 ),
+                                validator: validateInputForInjection,
                               ),
                             ),
                           ],

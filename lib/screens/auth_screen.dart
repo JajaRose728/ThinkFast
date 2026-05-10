@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../utils/constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/helpers.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -21,18 +22,27 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _submitForm() async {
     if (_formKey.currentState!.validate()) {
-      User? user;
-      if (_isLogin) {
-        user = await _authService.login(_emailController.text, _passwordController.text);
-      } else {
-        user = await _authService.signUp(_emailController.text, _passwordController.text);
-      }
+      try {
+        User? user;
+        if (_isLogin) {
+          user = await _authService.login(_emailController.text, _passwordController.text);
+        } else {
+          user = await _authService.signUp(_emailController.text, _passwordController.text);
+        }
 
-      if (user != null) {
-        Navigator.pushReplacementNamed(context, '/'); // Go to Home Screen
-      } else {
+        if (!mounted) return;
+
+        if (user != null) {
+          Navigator.pushReplacementNamed(context, '/'); // Go to Home Screen
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Authentication Failed. Check your credentials.')),
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Authentication Failed. Check your credentials.')),
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
         );
       }
     }
@@ -61,7 +71,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.3),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -91,7 +101,7 @@ class _AuthScreenState extends State<AuthScreen> {
               const SizedBox(height: 32),
               Card(
                 elevation: 4,
-                shadowColor: AppColors.primary.withOpacity(0.1),
+                shadowColor: AppColors.primary.withValues(alpha: 0.1),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -118,7 +128,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             prefixIcon: Icon(Icons.email_outlined, color: AppColors.primary),
                           ),
                           keyboardType: TextInputType.emailAddress,
-                          validator: (val) => val!.isEmpty ? 'Enter an email' : null,
+                          validator: validateEmail,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -132,18 +142,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                           obscureText: _obscurePassword,
-                          validator: (val) {
-                            if (_isLogin) {
-                              return val!.length < 6 ? 'Password must be at least 6 characters' : null;
-                            } else {
-                              if (val!.length < 8) return 'Password must be at least 8 characters';
-                              if (!RegExp(r'(?=.*[a-z])').hasMatch(val)) return 'Password must contain at least one lowercase letter';
-                              if (!RegExp(r'(?=.*[A-Z])').hasMatch(val)) return 'Password must contain at least one uppercase letter';
-                              if (!RegExp(r'(?=.*\d)').hasMatch(val)) return 'Password must contain at least one number';
-                              if (!RegExp(r'(?=.*[@$!%*?&])').hasMatch(val)) return 'Password must contain at least one special character';
-                              return null;
-                            }
-                          },
+                          validator: (val) => validatePassword(val, isLogin: _isLogin),
                         ),
                         const SizedBox(height: 24),
                         SizedBox(
