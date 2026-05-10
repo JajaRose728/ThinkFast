@@ -1,8 +1,9 @@
 # ThinkFast
-
+[!NOTE]
 ## Description
 ThinkFast is a Flutter-based quiz application that allows users to create, share, and take quizzes with friends. Users can build custom quizzes with multiple-choice questions, categorize them, and share via unique codes for others to import and play.
 
+[!TIP]
 ## Features
 - User authentication with Firebase Auth
 - Create and edit quizzes with multiple-choice questions
@@ -28,13 +29,14 @@ Quiz
 <img width="1919" height="896" alt="Screenshot 2026-05-10 125839" src="https://github.com/user-attachments/assets/f8f7d870-48a3-4885-bad3-35bf3c9fabff" />
 <img width="1919" height="949" alt="Screenshot 2026-05-10 130037" src="https://github.com/user-attachments/assets/a13cc049-f850-4251-bfb7-40e3494f7778" />
 
-
+[!TIP]
 ## Security Features (Course Goal 1)
 - [x] HTTPS for API calls (Firebase handles secure connections)
 - [x] Encrypted storage for sensitive data (Firebase Auth and Firestore)
 - [x] Input validation (Form validation in quiz creation and import)
 - [x] Secure authentication (Firebase Auth with email/password)
 
+[!TIP]
 ## Why Flutter? (Course Goal 2)
 Flutter was an excellent choice for this project because:
 - **Cross-platform benefit**: Single codebase runs on iOS, Android, and Web
@@ -43,6 +45,7 @@ Flutter was an excellent choice for this project because:
 - **Performance**: Native performance with Dart's compiled code
 - **Rich ecosystem**: Extensive packages for Firebase integration and state management
 
+[!TIP]
 ## Setup Instructions
 1. Clone the repository: `git clone <repository-url>`
 2. Navigate to project directory: `cd thinkfast`
@@ -54,6 +57,7 @@ Flutter was an excellent choice for this project because:
    - Configure Firebase options in `lib/firebase_options.dart`
 5. Run the app: `flutter run`
 
+[!TIP]
 ## Dependencies
 - firebase_core: 2.30.1
 - firebase_auth: 4.19.4
