@@ -1,4 +1,4 @@
-<img width="1919" height="948" alt="Screenshot 2026-05-10 125833" src="https://github.com/user-attachments/assets/e72d0365-1a4e-4e32-bce8-d12350be50e7" /># ThinkFast
+# ThinkFast
 
 ## Description
 ThinkFast is a Flutter-based quiz application that allows users to create, share, and take quizzes with friends. Users can build custom quizzes with multiple-choice questions, categorize them, and share via unique codes for others to import and play.
