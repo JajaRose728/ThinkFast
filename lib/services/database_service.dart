@@ -156,4 +156,39 @@ class DatabaseService {
       return Stream<List<Quiz>>.value([]);
     }
   }
+
+  // SYNC: Upload a draft quiz to Firestore
+  Future<void> syncDraftQuiz(Quiz quiz, String userId) async {
+    try {
+      final docRef = await _db.collection('quizzes').add({
+        'title': quiz.title,
+        'category': quiz.category,
+        'shareCode': quiz.shareCode,
+        'creatorId': userId,
+        'sharedWith': [userId], // Creator is automatically included
+        'questions': quiz.questions.map((q) => {
+          'text': q.questionText,
+          'options': q.options,
+          'answerIndex': q.correctAnswerIndex,
+        }).toList(),
+        'createdAt': FieldValue.serverTimestamp(),
+      }).timeout(const Duration(seconds: 30));
+
+      // Create a public lookup entry so others can import by share code
+      await _db.collection('shareCodes').doc(quiz.shareCode).set({
+        'quizId': docRef.id,
+        'createdAt': FieldValue.serverTimestamp(),
+      }).timeout(const Duration(seconds: 30));
+    } on TimeoutException catch (e) {
+      print("Sync timeout: $e");
+      throw Exception("Request timed out. Please check your internet connection and try again.");
+    } on SocketException catch (e) {
+      print("Sync network error: $e");
+      throw Exception("Network error. Please check your internet connection and try again.");
+    } catch (e) {
+      print("Error syncing draft: $e");
+      throw Exception("Failed to sync quiz: $e");
+    }
+  }
 }
+

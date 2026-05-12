@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 import '../models/quiz_model.dart';
 import '../services/database_service.dart';
+import '../services/draft_service.dart';
+import '../services/connectivity_service.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
 
@@ -18,9 +21,13 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   String _selectedCategory = quizCategories.first;
-  
+
   final List<Question> _questions = [];
   final DatabaseService _dbService = DatabaseService();
+  final ConnectivityService _connectivityService = ConnectivityService();
+  late DraftService _draftService;
+  bool _isOnline = true;
+  StreamSubscription<bool>? _connectivitySub;
 
   // Controllers for current question input
   final _questionTextController = TextEditingController();
@@ -33,6 +40,8 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeDraftService();
+    _checkConnectivity();
     _addOptionField();
     _addOptionField();
     if (_isEditing) {
@@ -45,8 +54,31 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
     }
   }
 
+  Future<void> _initializeDraftService() async {
+    _draftService = await DraftService.create();
+  }
+
+  void _checkConnectivity() async {
+    final hasInternet = await _connectivityService.hasInternet();
+    setState(() {
+      _isOnline = hasInternet;
+    });
+
+    // Listen for connectivity changes
+    _connectivitySub = _connectivityService.connectivityStream.listen((isOnline) {
+      if (!mounted) return;
+      setState(() {
+        _isOnline = isOnline;
+      });
+      if (isOnline) {
+        _showSyncPrompt();
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _connectivitySub?.cancel();
     _titleController.dispose();
     _questionTextController.dispose();
     for (var c in _optionControllers) {
@@ -90,7 +122,10 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
       _optionControllers.add(TextEditingController());
       _optionControllers.add(TextEditingController());
     }
-    _correctOptionIndex = selected.correctAnswerIndex.clamp(0, _optionControllers.length - 1);
+    _correctOptionIndex = selected.correctAnswerIndex.clamp(
+      0,
+      _optionControllers.length - 1,
+    );
     setState(() {
       _editingQuestionIndex = index;
       _questionTextController.text = selected.questionText;
@@ -118,10 +153,13 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
   // Generate a random 6-digit alphanumeric code
   String _generateShareCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return String.fromCharCodes(Iterable.generate(
-        6, (_) => chars.codeUnitAt(Random().nextInt(chars.length))));
+    return String.fromCharCodes(
+      Iterable.generate(
+        6,
+        (_) => chars.codeUnitAt(Random().nextInt(chars.length)),
+      ),
+    );
   }
-
 
   void _removeQuestion(int index) {
     setState(() {
@@ -161,9 +199,9 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
     setState(() {
       if (_editingQuestionIndex != null) {
         _questions[_editingQuestionIndex!] = newQuestion;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Question updated')), 
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Question updated')));
       } else {
         _questions.add(newQuestion);
       }
@@ -172,6 +210,9 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
   }
 
   void _saveQuiz() async {
+    // Offline drafts should never block saving because optional fields are empty.
+    // So we validate only the title and question list, and do NOT rely on TextFormField
+    // validators for question/options.
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -187,7 +228,9 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
           // Verify user is the creator before allowing edits
           if (widget.quizToEdit!.creatorId != user.uid) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Only the quiz creator can edit this quiz')),
+              const SnackBar(
+                content: Text('Only the quiz creator can edit this quiz'),
+              ),
             );
             return;
           }
@@ -212,12 +255,32 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
             category: _selectedCategory,
             questions: _questions,
             shareCode: _generateShareCode(),
+            creatorId: user.uid,
           );
-          await _dbService.uploadQuiz(newQuiz, user.uid);
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Quiz Created! Code: ${newQuiz.shareCode}')),
-          );
+
+          // Check if user is online
+          if (_isOnline) {
+            // Upload directly to Firebase
+            await _dbService.uploadQuiz(newQuiz, user.uid);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Quiz Created! Code: ${newQuiz.shareCode}'),
+              ),
+            );
+          } else {
+            // Save as draft locally
+            await _draftService.saveDraftQuiz(newQuiz);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Quiz saved as draft! Code: ${newQuiz.shareCode}',
+                ),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
         }
         Navigator.pop(context);
       } catch (e) {
@@ -226,14 +289,72 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
         if (errorMessage.startsWith('Exception: ')) {
           errorMessage = errorMessage.replaceFirst('Exception: ', '');
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $errorMessage')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $errorMessage')));
       }
     } else if (_questions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add at least one question!')),
       );
+    }
+  }
+
+  void _showSyncPrompt() async {
+    final drafts = await _draftService.getAllDrafts();
+    if (drafts.isEmpty) return;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sync Drafts'),
+        content: Text(
+          'You have ${drafts.length} draft(s) ready to sync. Sync now?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Later'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _syncAllDrafts();
+            },
+            child: const Text('Sync'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _syncAllDrafts() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final drafts = await _draftService.getAllDrafts();
+      for (final draft in drafts) {
+        await _dbService.syncDraftQuiz(draft, user.uid);
+      }
+      await _draftService.clearAllDrafts();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${drafts.length} quiz(zes) synced successfully!'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      String errorMessage = e.toString();
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.replaceFirst('Exception: ', '');
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sync failed: $errorMessage')));
     }
   }
 
@@ -244,6 +365,42 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Quiz' : 'Create New Quiz'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: _isOnline ? Colors.green : Colors.orange,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _isOnline ? Icons.cloud_done : Icons.cloud_off,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isOnline ? 'Online' : 'Offline',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Form(
         key: _formKey,
@@ -274,7 +431,10 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                       Container(
                         width: 12,
                         height: 12,
-                        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Text(category),
@@ -287,8 +447,14 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
               },
             ),
             const Divider(height: 40, thickness: 2),
-            Text(_isEditing ? "Edit Questions" : "Step 2: Add Questions", 
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.textPrimary)),
+            Text(
+              _isEditing ? "Edit Questions" : "Step 2: Add Questions",
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: AppColors.textPrimary,
+              ),
+            ),
             const SizedBox(height: 10),
             Card(
               color: catColor.withOpacity(0.05),
@@ -305,15 +471,25 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                       controller: _questionTextController,
                       decoration: const InputDecoration(
                         labelText: 'Question Text',
-                        prefixIcon: Icon(Icons.help_outline, color: AppColors.primary),
+                        prefixIcon: Icon(
+                          Icons.help_outline,
+                          color: AppColors.primary,
+                        ),
                       ),
                       validator: validateInputForInjection,
                     ),
                     const SizedBox(height: 16),
-                    const Text('Answer Options', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    const Text(
+                      'Answer Options',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     ...List.generate(_optionControllers.length, (index) {
-                      final optColor = optionColors[index % optionColors.length];
+                      final optColor =
+                          optionColors[index % optionColors.length];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
@@ -342,14 +518,22 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                                     child: Center(
                                       child: Text(
                                         String.fromCharCode(65 + index),
-                                        style: TextStyle(color: optColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                        style: TextStyle(
+                                          color: optColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ),
                                   ),
                                   suffixIcon: _optionControllers.length > 2
                                       ? IconButton(
-                                          icon: const Icon(Icons.remove_circle, color: AppColors.error),
-                                          onPressed: () => _removeOptionField(index),
+                                          icon: const Icon(
+                                            Icons.remove_circle,
+                                            color: AppColors.error,
+                                          ),
+                                          onPressed: () =>
+                                              _removeOptionField(index),
                                         )
                                       : null,
                                 ),
@@ -364,18 +548,28 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                       TextButton.icon(
                         onPressed: _addOptionField,
                         icon: const Icon(Icons.add, color: AppColors.primary),
-                        label: const Text('Add Option', style: TextStyle(color: AppColors.primary)),
+                        label: const Text(
+                          'Add Option',
+                          style: TextStyle(color: AppColors.primary),
+                        ),
                       ),
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
                       onPressed: _saveQuestion,
                       icon: const Icon(Icons.add),
-                      label: Text(_editingQuestionIndex != null ? "Update Question" : "Add Question to List"),
+                      label: Text(
+                        _editingQuestionIndex != null
+                            ? "Update Question"
+                            : "Add Question to List",
+                      ),
                     ),
                     if (_editingQuestionIndex != null)
                       TextButton(
                         onPressed: _clearQuestionForm,
-                        child: const Text('Cancel Edit', style: TextStyle(color: AppColors.error)),
+                        child: const Text(
+                          'Cancel Edit',
+                          style: TextStyle(color: AppColors.error),
+                        ),
                       ),
                   ],
                 ),
@@ -389,8 +583,11 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                "Questions to be saved: ${_questions.length}", 
-                style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.primary),
+                "Questions to be saved: ${_questions.length}",
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -398,7 +595,10 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.warning.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
@@ -424,7 +624,10 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 color: isSelected ? AppColors.primary.withOpacity(0.08) : null,
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   leading: Container(
                     width: 36,
                     height: 36,
@@ -433,11 +636,28 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Center(
-                      child: Text('${index + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        '${index + 1}',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
-                  title: Text(q.questionText, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('${q.options.length} options • Correct: ${q.options[q.correctAnswerIndex]}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  title: Text(
+                    q.questionText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '${q.options.length} options • Correct: ${q.options[q.correctAnswerIndex]}',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete, color: AppColors.error),
                     onPressed: () => _removeQuestion(index),
@@ -450,13 +670,22 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
             ElevatedButton(
               onPressed: _saveQuiz,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isEditing ? AppColors.warning : AppColors.success, 
+                backgroundColor: _isEditing
+                    ? AppColors.warning
+                    : AppColors.success,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: Text(_isEditing ? "UPDATE QUIZ" : "SAVE TO DATABASE", 
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(
+                _isEditing ? "UPDATE QUIZ" : "SAVE TO DATABASE",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
@@ -464,4 +693,3 @@ class _QuizCreatorScreenState extends State<QuizCreatorScreen> {
     );
   }
 }
-
