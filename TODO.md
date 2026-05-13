@@ -1,27 +1,10 @@
-# ThinkFast Quiz App - Error Fixes TODO
+# TODO
 
-## Status: [IN PROGRESS] 
+## Security hardening + tests
 
-### Step 1: ✅ Fix NaN crash in quiz_screen.dart
-- Added early return for totalQuestions == 0
-- Safe percentage with .clamp(0.0, 1.0)
-
-### Step 2: ✅ Fix Firestore delete permissions in firestore.rules
-- Added `allow delete: if isCreator();` for quizzes
-- Added `allow delete: if isCreator() || isAuthenticated();` for shareCodes
-
-### Step 3: [SKIPPED] Add prevention in quiz_provider.dart
-- UI now handles empty quizzes gracefully (Step 1 fix)
-- No further provider changes needed
-
-### Step 4: [SKIPPED] Optional: Filter empty quizzes in home_screen.dart
-- Not needed - UI handles gracefully now
-
-### Step 5: ✅ Test ready
-- Run `flutter run -d chrome` to verify
-- NaN error fixed, delete permissions enabled
-
-**Status:** ✅ COMPLETE - Core errors resolved!
-
-**Test command:** `flutter run -d chrome`
+- [x] Step 1: Harden Firestore rules (fix `/shareCodes/{code}` authorization and add schema validation).
+- [x] Step 2: Remove/guard debug prints and avoid logging exception internals in Dart services.
+- [x] Step 3: Add unit tests for `lib/utils/helpers.dart` validators (edge cases included).
+- [x] Step 4: Update `SECURITY_CHECKLIST.md` to reflect implemented items.
+- [ ] Step 5: Run `flutter test` and fix any failing tests/build issues.
 

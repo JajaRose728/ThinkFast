@@ -34,7 +34,18 @@ Quiz
 - [x] Input validation (Form validation in quiz creation and import)
 - [x] Secure authentication (Firebase Auth with email/password)
 
+## Security Checklist / Audit Notes
+- Primary security boundary: `firestore.rules`
+- App-side validation exists but is not a security boundary.
+- Current gaps (code audit):
+  - `shareCodes/*` create/delete is currently allowed for any authenticated user.
+  - No schema/type/bounds validation in `firestore.rules` for quiz documents.
+  - No unit tests for validators or Firestore rules.
+
+
+
 ## Why Flutter? (Course Goal 2)
+
 Flutter was an excellent choice for this project because:
 - **Cross-platform benefit**: Single codebase runs on iOS, Android, and Web
 - **Hot reload**: Significantly speeded up development and UI iteration

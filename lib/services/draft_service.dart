@@ -1,6 +1,9 @@
 import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/quiz_model.dart';
+import '../utils/secure_logger.dart';
 
 class DraftService {
   static const String _draftKeysPrefix = 'quiz_draft_';
@@ -57,8 +60,8 @@ class DraftService {
         indices.add(draftId);
         await _prefs.setStringList(_draftIndicesKey, indices);
       }
-    } catch (e) {
-      print('Error saving draft quiz: $e');
+    } catch (_) {
+      SecureLogger.w('Error saving draft quiz');
       rethrow;
     }
   }
@@ -98,8 +101,8 @@ class DraftService {
       }
 
       return drafts;
-    } catch (e) {
-      print('Error retrieving drafts: $e');
+    } catch (_) {
+      SecureLogger.w('Error retrieving drafts');
       return [];
     }
   }
@@ -130,8 +133,8 @@ class DraftService {
         questions: questions,
         creatorId: data['creatorId'] as String?,
       );
-    } catch (e) {
-      print('Error retrieving draft: $e');
+    } catch (_) {
+      SecureLogger.w('Error retrieving draft');
       return null;
     }
   }
@@ -145,8 +148,8 @@ class DraftService {
       final indices = _getDraftIndices();
       indices.remove(draftId);
       await _prefs.setStringList(_draftIndicesKey, indices);
-    } catch (e) {
-      print('Error deleting draft: $e');
+    } catch (_) {
+      SecureLogger.w('Error deleting draft');
       rethrow;
     }
   }
@@ -160,8 +163,8 @@ class DraftService {
         await _prefs.remove(key);
       }
       await _prefs.remove(_draftIndicesKey);
-    } catch (e) {
-      print('Error clearing drafts: $e');
+    } catch (_) {
+      SecureLogger.w('Error clearing drafts');
       rethrow;
     }
   }
@@ -170,9 +173,9 @@ class DraftService {
   Future<List<Quiz>> getUnsyncedDrafts() async {
     try {
       final drafts = await getAllDrafts();
-      return drafts; // All local drafts are unsyced until uploaded to Firebase
-    } catch (e) {
-      print('Error retrieving unsynced drafts: $e');
+      return drafts; // All local drafts are unsynced until uploaded to Firebase
+    } catch (_) {
+      SecureLogger.w('Error retrieving unsynced drafts');
       return [];
     }
   }
@@ -181,3 +184,4 @@ class DraftService {
     return _prefs.getStringList(_draftIndicesKey) ?? [];
   }
 }
+

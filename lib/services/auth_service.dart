@@ -1,7 +1,9 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../utils/secure_logger.dart';
 import 'security_service.dart';
 
 class AuthService {
@@ -14,6 +16,7 @@ class AuthService {
       UserCredential result = await _auth
           .createUserWithEmailAndPassword(email: email, password: password)
           .timeout(const Duration(seconds: 30));
+
       final user = result.user;
       if (user != null) {
         try {
@@ -21,29 +24,26 @@ class AuthService {
             SecurityService.lastUserUidKey,
             user.uid,
           );
-        } catch (e) {
-          print('Secure storage save failed: $e');
+        } catch (_) {
+          SecureLogger.w('Secure storage save failed');
         }
       }
+
       return user;
-    } on TimeoutException catch (e) {
-      print("Sign up timeout: $e");
+    } on TimeoutException {
+      SecureLogger.w('Sign up timeout');
       throw Exception(
-        "Request timed out. Please check your internet connection and try again.",
+        'Request timed out. Please check your internet connection and try again.',
       );
-    } on SocketException catch (e) {
-      print("Sign up network error: $e");
+    } on SocketException {
+      SecureLogger.w('Sign up network error');
       throw Exception(
-        "Network error. Please check your internet connection and try again.",
+        'Network error. Please check your internet connection and try again.',
       );
-    } on FirebaseAuthException catch (e) {
-      // This will print the specific error to your console
-      print("Firebase Error Code: ${e.code}");
-      print("Firebase Error Message: ${e.message}");
+    } on FirebaseAuthException {
       return null;
-    } catch (e) {
-      print("Unexpected error during sign up: $e");
-      throw Exception("An unexpected error occurred. Please try again.");
+    } catch (_) {
+      throw Exception('An unexpected error occurred. Please try again.');
     }
   }
 
@@ -53,6 +53,7 @@ class AuthService {
       UserCredential result = await _auth
           .signInWithEmailAndPassword(email: email, password: password)
           .timeout(const Duration(seconds: 30));
+
       final user = result.user;
       if (user != null) {
         try {
@@ -60,27 +61,26 @@ class AuthService {
             SecurityService.lastUserUidKey,
             user.uid,
           );
-        } catch (e) {
-          print('Secure storage save failed: $e');
+        } catch (_) {
+          SecureLogger.w('Secure storage save failed');
         }
       }
+
       return user;
-    } on TimeoutException catch (e) {
-      print("Login timeout: $e");
+    } on TimeoutException {
+      SecureLogger.w('Login timeout');
       throw Exception(
-        "Request timed out. Please check your internet connection and try again.",
+        'Request timed out. Please check your internet connection and try again.',
       );
-    } on SocketException catch (e) {
-      print("Login network error: $e");
+    } on SocketException {
+      SecureLogger.w('Login network error');
       throw Exception(
-        "Network error. Please check your internet connection and try again.",
+        'Network error. Please check your internet connection and try again.',
       );
-    } on FirebaseAuthException catch (e) {
-      print("Firebase Auth Error: ${e.code} - ${e.message}");
+    } on FirebaseAuthException {
       return null;
-    } catch (e) {
-      print("Unexpected error during login: $e");
-      throw Exception("An unexpected error occurred. Please try again.");
+    } catch (_) {
+      throw Exception('An unexpected error occurred. Please try again.');
     }
   }
 
@@ -90,3 +90,4 @@ class AuthService {
     await _securityService.deleteSecureData(SecurityService.lastUserUidKey);
   }
 }
+

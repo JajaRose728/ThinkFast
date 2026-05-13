@@ -1,5 +1,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 
+import '../utils/secure_logger.dart';
+
 class ConnectivityService {
   final Connectivity _connectivity = Connectivity();
 
@@ -10,8 +12,8 @@ class ConnectivityService {
       return result == ConnectivityResult.mobile ||
           result == ConnectivityResult.wifi ||
           result == ConnectivityResult.ethernet;
-    } catch (e) {
-      print('Error checking connectivity: $e');
+    } catch (_) {
+      SecureLogger.w('Error checking connectivity');
       return false;
     }
   }
@@ -25,3 +27,4 @@ class ConnectivityService {
     });
   }
 }
+

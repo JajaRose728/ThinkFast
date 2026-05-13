@@ -1,8 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/quiz_model.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'dart:io';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../models/quiz_model.dart';
+import '../utils/secure_logger.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -23,35 +26,36 @@ class DatabaseService {
         }).toList(),
         'createdAt': FieldValue.serverTimestamp(),
       }).timeout(const Duration(seconds: 30));
-      
+
       // Create a public lookup entry so others can import by share code
       await _db.collection('shareCodes').doc(quiz.shareCode).set({
         'quizId': docRef.id,
         'createdAt': FieldValue.serverTimestamp(),
       }).timeout(const Duration(seconds: 30));
-    } on TimeoutException catch (e) {
-      print("Upload timeout: $e");
-      throw Exception("Request timed out. Please check your internet connection and try again.");
-    } on SocketException catch (e) {
-      print("Upload network error: $e");
-      throw Exception("Network error. Please check your internet connection and try again.");
-    } catch (e) {
-      print("Error uploading: $e");
-      throw Exception("Failed to upload quiz: $e");
+    } on TimeoutException {
+      throw Exception('Request timed out. Please check your internet connection and try again.');
+    } on SocketException {
+      throw Exception('Network error. Please check your internet connection and try again.');
+    } catch (_) {
+      throw Exception('Failed to upload quiz.');
     }
   }
 
   // UPDATE: Update an existing quiz (only creator should call this)
   Future<void> updateQuiz(Quiz quiz) async {
-    if (quiz.id == null) throw Exception("Quiz ID is required for update");
+    if (quiz.id == null) throw Exception('Quiz ID is required for update');
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception("User not authenticated");
+      if (user == null) throw Exception('User not authenticated');
 
-      final quizDoc = await _db.collection('quizzes').doc(quiz.id).get().timeout(const Duration(seconds: 30));
-      if (!quizDoc.exists) throw Exception("Quiz not found");
+      final quizDoc = await _db
+          .collection('quizzes')
+          .doc(quiz.id)
+          .get()
+          .timeout(const Duration(seconds: 30));
+      if (!quizDoc.exists) throw Exception('Quiz not found');
       if (quizDoc.data()?['creatorId'] != user.uid) {
-        throw Exception("Only the quiz creator can update this quiz");
+        throw Exception('Only the quiz creator can update this quiz');
       }
 
       await _db.collection('quizzes').doc(quiz.id).update({
@@ -64,15 +68,12 @@ class DatabaseService {
         }).toList(),
         'updatedAt': FieldValue.serverTimestamp(),
       }).timeout(const Duration(seconds: 30));
-    } on TimeoutException catch (e) {
-      print("Update timeout: $e");
-      throw Exception("Request timed out. Please check your internet connection and try again.");
-    } on SocketException catch (e) {
-      print("Update network error: $e");
-      throw Exception("Network error. Please check your internet connection and try again.");
-    } catch (e) {
-      print("Error updating: $e");
-      throw Exception("Failed to update quiz: $e");
+    } on TimeoutException {
+      throw Exception('Request timed out. Please check your internet connection and try again.');
+    } on SocketException {
+      throw Exception('Network error. Please check your internet connection and try again.');
+    } catch (_) {
+      throw Exception('Failed to update quiz.');
     }
   }
 
@@ -80,40 +81,40 @@ class DatabaseService {
   Future<void> deleteQuiz(String quizId, String shareCode) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception("User not authenticated");
+      if (user == null) throw Exception('User not authenticated');
 
       // First verify the user is the creator before attempting deletion
-      final quizDoc = await _db.collection('quizzes').doc(quizId).get().timeout(const Duration(seconds: 30));
-      if (!quizDoc.exists) throw Exception("Quiz not found");
+      final quizDoc = await _db
+          .collection('quizzes')
+          .doc(quizId)
+          .get()
+          .timeout(const Duration(seconds: 30));
+      if (!quizDoc.exists) throw Exception('Quiz not found');
       if (quizDoc.data()?['creatorId'] != user.uid) {
-        throw Exception("Only the quiz creator can delete this quiz");
+        throw Exception('Only the quiz creator can delete this quiz');
       }
 
       final codeToDelete = shareCode.trim().isNotEmpty
           ? shareCode.trim()
           : (quizDoc.data()?['shareCode'] ?? '').toString().trim();
 
-      // Delete share code first (in case share code deletion fails, quiz remains)
+      // Delete share code first
       if (codeToDelete.isNotEmpty) {
         try {
           await _db.collection('shareCodes').doc(codeToDelete).delete().timeout(const Duration(seconds: 30));
-        } catch (e) {
-          print("Warning: Could not delete share code: $e");
-          // Continue with quiz deletion even if share code fails
+        } catch (_) {
+          // best-effort; don't leak internals
+          SecureLogger.w('Could not delete share code');
         }
       }
 
-      // Then delete the quiz
       await _db.collection('quizzes').doc(quizId).delete().timeout(const Duration(seconds: 30));
-    } on TimeoutException catch (e) {
-      print("Delete timeout: $e");
-      throw Exception("Request timed out. Please check your internet connection and try again.");
-    } on SocketException catch (e) {
-      print("Delete network error: $e");
-      throw Exception("Network error. Please check your internet connection and try again.");
-    } catch (e) {
-      print("Error deleting: $e");
-      throw Exception("Failed to delete quiz: $e");
+    } on TimeoutException {
+      throw Exception('Request timed out. Please check your internet connection and try again.');
+    } on SocketException {
+      throw Exception('Network error. Please check your internet connection and try again.');
+    } catch (_) {
+      throw Exception('Failed to delete quiz.');
     }
   }
 
@@ -123,9 +124,7 @@ class DatabaseService {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return Stream<List<Quiz>>.value([]);
 
-      // Query for quizzes where user is creator OR is in sharedWith.
-      // This is safe with the updated rules that allow read for either condition.
-      Query query = _db.collection('quizzes').where(
+      final query = _db.collection('quizzes').where(
         Filter.or(
           Filter('creatorId', isEqualTo: user.uid),
           Filter('sharedWith', arrayContains: user.uid),
@@ -138,21 +137,19 @@ class DatabaseService {
             return Quiz.fromMap(doc.id, doc.data() as Map<String, dynamic>);
           }).toList();
 
-          // Filter by category client-side to avoid composite index issues
           if (category != 'All') {
             quizzes = quizzes.where((quiz) => quiz.category == category).toList();
           }
 
           return quizzes;
-        } catch (e) {
-          print("Error processing quiz data: $e");
+        } catch (_) {
+          SecureLogger.w('Error processing quiz data');
           return <Quiz>[];
         }
-      }).handleError((error) {
-        print("Stream error in getQuizzesForUser: $error");
+      }).handleError((_) {
+        SecureLogger.w('Stream error in getQuizzesForUser');
       });
-    } catch (e) {
-      print("Error setting up quiz query: $e");
+    } catch (_) {
       return Stream<List<Quiz>>.value([]);
     }
   }
@@ -165,7 +162,7 @@ class DatabaseService {
         'category': quiz.category,
         'shareCode': quiz.shareCode,
         'creatorId': userId,
-        'sharedWith': [userId], // Creator is automatically included
+        'sharedWith': [userId],
         'questions': quiz.questions.map((q) => {
           'text': q.questionText,
           'options': q.options,
@@ -174,20 +171,16 @@ class DatabaseService {
         'createdAt': FieldValue.serverTimestamp(),
       }).timeout(const Duration(seconds: 30));
 
-      // Create a public lookup entry so others can import by share code
       await _db.collection('shareCodes').doc(quiz.shareCode).set({
         'quizId': docRef.id,
         'createdAt': FieldValue.serverTimestamp(),
       }).timeout(const Duration(seconds: 30));
-    } on TimeoutException catch (e) {
-      print("Sync timeout: $e");
-      throw Exception("Request timed out. Please check your internet connection and try again.");
-    } on SocketException catch (e) {
-      print("Sync network error: $e");
-      throw Exception("Network error. Please check your internet connection and try again.");
-    } catch (e) {
-      print("Error syncing draft: $e");
-      throw Exception("Failed to sync quiz: $e");
+    } on TimeoutException {
+      throw Exception('Request timed out. Please check your internet connection and try again.');
+    } on SocketException {
+      throw Exception('Network error. Please check your internet connection and try again.');
+    } catch (_) {
+      throw Exception('Failed to sync quiz.');
     }
   }
 }
